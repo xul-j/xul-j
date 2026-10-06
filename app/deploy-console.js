@@ -7,6 +7,24 @@ const now = () => new Date().toISOString().slice(11, 23);
 
 const ENVS = ['staging', 'production'];
 
+// Themes are design tokens; the client decides how (and whether) to apply them.
+const THEMES = {
+  default: null,
+  classic: {
+    tokens: {
+      background: '#c0c0c0', chrome: '#c0c0c0', surface: '#ffffff', text: '#000000', muted: '#404040', border: '#808080',
+      accent: '#000080', accentText: '#ffffff', danger: '#a00000', radius: 0, density: 'compact', font: 'classic',
+    },
+  },
+  terminal: {
+    tokens: {
+      background: '#0b0f0b', chrome: '#101810', surface: '#0f150f', text: '#4dff7a', muted: '#2fbf5a', border: '#1f4d2a',
+      accent: '#4dff7a', accentText: '#002a0c', danger: '#ff6b6b', warning: '#ffd166', radius: 0, density: 'compact', font: 'mono',
+    },
+  },
+};
+THEMES.terminal.dark = THEMES.terminal.tokens; // a dark theme is fine in dark mode too
+
 const STEPS = [
   ['info', 'Resolving revision a1f9c3e'],
   ['debug', 'git fetch --depth=1 origin a1f9c3e'],
@@ -25,7 +43,7 @@ const STEPS = [
 ];
 
 function start(ui) {
-  const st = { all: [], filter: '', verbose: true, env: 'staging', run: null };
+  const st = { all: [], shown: [], selection: [], filter: '', verbose: true, env: 'staging', run: null, theme: 'default' };
 
   const visible = (r) =>
     (st.verbose || r.level !== 'debug') &&
@@ -34,11 +52,35 @@ function start(ui) {
   function log(level, msg) {
     const row = { t: now(), level, msg };
     st.all.push(row);
-    if (visible(row)) ui.emit({ op: 'rows', source: 'log', append: [row] });
+    if (visible(row)) {
+      st.shown.push(row);
+      ui.emit({ op: 'rows', source: 'log', append: [row] });
+    }
   }
 
   function refilter() {
-    ui.emit({ op: 'rows', source: 'log', clear: true, append: st.all.filter(visible) });
+    st.shown = st.all.filter(visible);
+    ui.emit({ op: 'rows', source: 'log', clear: true, append: st.shown });
+    setSelection([]);
+  }
+
+  // The selection is the app's truth: echo it, and enable the context-menu items that need one.
+  function setSelection(rows) {
+    st.selection = rows.filter((r) => r < st.shown.length);
+    ui.emit({ op: 'set', id: 'log', attrs: { selection: st.selection } });
+    ui.emit({ op: 'command', id: 'cmd_details', disabled: st.selection.length === 0 });
+    ui.emit({ op: 'command', id: 'cmd_only_level', disabled: st.selection.length !== 1 });
+  }
+
+  function setTheme(name) {
+    st.theme = name;
+    for (const k of Object.keys(THEMES)) ui.emit({ op: 'broadcast', id: `theme_${k}`, value: k === name });
+    ui.emit({ op: 'theme', ...(THEMES[name] || { tokens: {} }) });
+  }
+
+  function details(rows) {
+    const lines = rows.map((i) => st.shown[i]).filter(Boolean).map((r) => `${r.t} ${r.level.toUpperCase()} ${r.msg}`);
+    if (lines.length) ui.emit({ op: 'notify', message: lines.join(' · '), level: 'info' });
   }
 
   function setBusy(busy) {
@@ -123,6 +165,12 @@ function start(ui) {
     ui.emit({ op: 'broadcast', id: 'progress', value: 0 });
 
     ui.emit({ op: 'command', id: 'cmd_verbose', label: 'Show debug lines' });
+    ui.emit({ op: 'command', id: 'cmd_details', label: 'Show details', disabled: true });
+    ui.emit({ op: 'command', id: 'cmd_only_level', label: 'Show only this level', disabled: true });
+    for (const k of Object.keys(THEMES)) {
+      ui.emit({ op: 'command', id: `cmd_theme_${k}`, label: k[0].toUpperCase() + k.slice(1) });
+      ui.emit({ op: 'broadcast', id: `theme_${k}`, value: k === 'default' });
+    }
     for (const e of ENVS) ui.emit({ op: 'command', id: `cmd_env_${e}`, label: e[0].toUpperCase() + e.slice(1) });
     ui.emit({ op: 'broadcast', id: 'verbose', value: true });
     for (const e of ENVS) ui.emit({ op: 'broadcast', id: `is_${e}`, value: e === st.env });
@@ -152,6 +200,22 @@ function start(ui) {
             { tag: 'menuitem', id: 'mi_bulk', command: 'cmd_bulk' },
           ],
         },
+        {
+          tag: 'menu', id: 'm_view', label: 'View', accesskey: 'alt+v',
+          children: [{
+            tag: 'menu', id: 'm_theme', label: 'Theme',
+            children: Object.keys(THEMES).map((k) => ({ tag: 'menuitem', id: `mi_theme_${k}`, command: `cmd_theme_${k}`, observes: { checked: `theme_${k}` } })),
+          }],
+        },
+      ],
+    });
+    ui.emit({
+      op: 'node', in: 'win', tag: 'menupopup', id: 'log_menu',
+      children: [
+        { tag: 'menuitem', id: 'cm_details', command: 'cmd_details' },
+        { tag: 'menuitem', id: 'cm_only_level', command: 'cmd_only_level' },
+        { tag: 'menuseparator', id: 'cm_sep' },
+        { tag: 'menuitem', id: 'cm_clear', command: 'cmd_clear' },
       ],
     });
     await sleep(120);
@@ -209,7 +273,7 @@ function start(ui) {
     // The log tree arrives "late": the placeholder has been holding its space.
     await sleep(700);
     ui.emit({
-      op: 'replace', id: 'log', tag: 'tree', flex: 1, class: 'mono',
+      op: 'replace', id: 'log', tag: 'tree', flex: 1, class: 'mono', seltype: 'multiple', selection: [], contextmenu: 'log_menu',
       cols: [{ id: 't', label: 'Time', width: 110 }, { id: 'level', label: 'Level', width: 70 }, { id: 'msg', label: 'Message', flex: 1 }],
       rows: { source: 'log' },
     });
@@ -229,11 +293,22 @@ function start(ui) {
           case 'cmd_cancel': if (st.run) st.run.cancelled = true; break;
           case 'cmd_bulk': bulk(); break;
           case 'cmd_clear': st.all = []; refilter(); status('Log cleared'); break;
+          case 'cmd_details': details(st.selection); break;
+          case 'cmd_only_level': {
+            const row = st.shown[st.selection[0]];
+            if (row) { st.filter = row.level; ui.emit({ op: 'set', id: 'filter', attrs: { value: row.level } }); refilter(); }
+            break;
+          }
           case 'cmd_rollback': log('warn', `Rollback of ${st.env} requested (demo: no-op)`); break;
           case 'cmd_verbose': setVerbose(!st.verbose); break;
           default:
             if (m.command.startsWith('cmd_env_')) setEnv(m.command.slice(8));
+            if (m.command.startsWith('cmd_theme_')) setTheme(m.command.slice(10));
         }
+      } else if (m.op === 'select' && m.id === 'log') {
+        setSelection(m.rows);
+      } else if (m.op === 'activate' && m.id === 'log') {
+        details([m.row]);
       } else if (m.op === 'input') {
         if (m.id === 'filter') { st.filter = String(m.value); refilter(); }
         if (m.id === 'verbose') setVerbose(Boolean(m.value));

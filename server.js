@@ -63,6 +63,9 @@ setInterval(() => {
 const INTENTS = {
   do: (m) => typeof m.command === 'string',
   input: (m) => typeof m.id === 'string' && 'value' in m,
+  select: (m) => typeof m.id === 'string' && Array.isArray(m.rows) && m.rows.every((r) => Number.isInteger(r) && r >= 0),
+  activate: (m) => typeof m.id === 'string' && Number.isInteger(m.row) && m.row >= 0,
+  contextmenu: (m) => typeof m.id === 'string' && typeof m.target === 'string',
 };
 
 function handleStream(req, res, url) {

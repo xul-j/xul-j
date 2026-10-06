@@ -58,7 +58,7 @@ async function step(name, fn) {
   await step('menubar: nested menus, separators, access keys, checked items bound to broadcasters', async () => {
     const mb = model.ids.get('mb');
     assert.strictEqual(model.ids.get('win').children[0], mb, 'menubar comes first');
-    assert.deepStrictEqual(mb.children.map((c) => `${c.tag}:${c.attrs.label}:${c.attrs.accesskey}`), ['menu:Deploy:alt+d', 'menu:Log:alt+l']);
+    assert.deepStrictEqual(mb.children.map((c) => `${c.tag}:${c.attrs.label}:${c.attrs.accesskey}`), ['menu:Deploy:alt+d', 'menu:Log:alt+l', 'menu:View:alt+v']);
     assert.deepStrictEqual(model.ids.get('m_deploy').children.map((c) => c.tag), ['menuitem', 'menuitem', 'menuseparator', 'menu']);
     assert.strictEqual(model.resolved(model.ids.get('mi_deploy')).label, 'Deploy', 'label comes from the command');
     assert.strictEqual(model.resolved(model.ids.get('mi_env_staging')).checked, true);
@@ -68,7 +68,34 @@ async function step(name, fn) {
     assert.strictEqual(model.resolved(model.ids.get('verbose')).value, false, 'the checkbox follows the same broadcaster');
     await intent(base, session, { op: 'do', command: 'cmd_verbose' });
     await until(() => model.resolved(model.ids.get('mi_verbose')).checked === true, 'toggled back');
-    assert(renderText(model).includes('≡ Deploy ▾  Log ▾'));
+    assert(renderText(model).includes('≡ Deploy ▾  Log ▾  View ▾'));
+  });
+
+  await step('selection, activation and the context menu: the app owns the selection', async () => {
+    assert.strictEqual(model.ids.get('log').attrs.contextmenu, 'log_menu');
+    assert.strictEqual(model.ids.get('log_menu').tag, 'menupopup');
+    assert.strictEqual(model.commands.get('cmd_details').disabled, true, 'nothing selected yet');
+    assert.strictEqual((await intent(base, session, { op: 'select', id: 'log', rows: [0, 99] })).status, 202);
+    await until(() => JSON.stringify(model.ids.get('log').attrs.selection) === '[0]', 'out-of-range rows dropped by the app');
+    assert.strictEqual(model.commands.get('cmd_details').disabled, false);
+    assert(renderText(model).includes('1 selected'));
+    assert.strictEqual((await intent(base, session, { op: 'contextmenu', id: 'log_menu', target: 'log' })).status, 202);
+    const before = model.transient.length;
+    await intent(base, session, { op: 'activate', id: 'log', row: 0 });
+    await until(() => model.transient.length > before, 'activation answered');
+    assert.match(model.transient[model.transient.length - 1].message, /Console ready/);
+    assert.strictEqual((await intent(base, session, { op: 'select', id: 'log', rows: [-1] })).status, 400);
+    await intent(base, session, { op: 'select', id: 'log', rows: [] });
+    await until(() => model.commands.get('cmd_details').disabled === true, 'cleared');
+  });
+
+  await step('themes are tokens: chosen from a menu, validated by the schema', async () => {
+    await intent(base, session, { op: 'do', command: 'cmd_theme_terminal' });
+    await until(() => model.theme && model.theme.tokens.font === 'mono', 'theme op');
+    assert.deepStrictEqual(validate({ op: 'theme', tokens: model.theme.tokens, dark: model.theme.dark }), []);
+    assert.strictEqual(model.resolved(model.ids.get('mi_theme_terminal')).checked, true);
+    await intent(base, session, { op: 'do', command: 'cmd_theme_default' });
+    await until(() => model.theme && !model.theme.tokens.font, 'back to default');
   });
 
   await step('disabled command is refused by the server', async () => {

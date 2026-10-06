@@ -15,6 +15,7 @@ class Model {
     this.sources = new Map();
     this.waiting = []; // overlays whose anchor has not arrived yet
     this.lastSeq = 0;
+    this.theme = null;
     this.transient = this.transient || []; // download/notify ops (not UI state; survive reset)
   }
 
@@ -24,6 +25,7 @@ class Model {
       case 'reset': return this.reset();
       case 'download':
       case 'notify': return this.transient.push(op);
+      case 'theme': this.theme = op; return;
       case 'node':
         if (this.insert(op)) return;
         // A newer version of a still-waiting node supersedes the queued one.
@@ -164,15 +166,18 @@ function renderText(model, { maxRows = 5 } = {}) {
       case 'groupbox': out.push(`${pad}-- ${a.label || n.tag} --`); break;
       case 'tree': {
         const rows = model.sources.get(a.rows.source) || [];
-        out.push(`${pad}${a.cols.map((c) => c.label).join(' | ')}   (${rows.length} rows)`);
-        for (const r of rows.slice(-maxRows)) out.push(`${pad}  ${a.cols.map((c) => r[c.id]).join(' | ')}`);
+        const sel = new Set(a.selection || []);
+        out.push(`${pad}${a.cols.map((c) => c.label).join(' | ')}   (${rows.length} rows${sel.size ? `, ${sel.size} selected` : ''})`);
+        const start = Math.max(0, rows.length - maxRows);
+        rows.slice(start).forEach((r, k) => out.push(`${pad}${sel.has(start + k) ? '> ' : '  '}${a.cols.map((c) => r[c.id]).join(' | ')}`));
         break;
       }
       case 'menubar':
         out.push(`${pad}≡ ${n.children.filter((c) => !model.resolved(c).hidden).map((c) => (c.tag === 'menu' ? `${model.resolved(c).label} ▾` : model.resolved(c).label || '')).join('  ')}`);
         return;
       case 'menu': out.push(`${pad}[ ${a.label} ▾ ]`); return; // a dropdown in a toolbar
-      case 'spacer': return;
+      case 'spacer':
+      case 'menupopup': return; // context menus are not part of the visible layout
       default: if (n.tag !== 'vbox' && n.tag !== 'hbox' && n.tag !== 'box') out.push(`${pad}<${n.tag}>`);
     }
     n.children.forEach((c) => walk(c, n.tag === 'root' ? depth : depth + 1));

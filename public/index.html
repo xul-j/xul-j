@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XUL-J</title>
+  <link rel="stylesheet" href="xul.css">
+</head>
+<body>
+  <main id="app">
+    <div id="root" class="x x-root"></div>
+    <aside id="wire" hidden>
+      <header>
+        <strong>Wire</strong>
+        <span id="wire-count">0 ops</span>
+        <label><input type="checkbox" id="wire-pause"> pause</label>
+      </header>
+      <ol id="wire-log"></ol>
+    </aside>
+  </main>
+  <footer id="dev">
+    <span id="conn" class="conn-off">connecting</span>
+    <span id="seq">seq 0</span>
+    <button type="button" id="wire-toggle">Show wire</button>
+    <button type="button" id="drop">Drop connection</button>
+  </footer>
+  <script src="xulj.js"></script>
+  <script>
+    'use strict';
+    let session;
+    try { session = sessionStorage.getItem('xulj-session'); } catch {}
+    if (!session) {
+      session = Math.random().toString(36).slice(2, 12);
+      try { sessionStorage.setItem('xulj-session', session); } catch {}
+    }
+
+    const send = (intent) => {
+      logWire('→', intent);
+      fetch(`/intent?session=${session}`, { method: 'POST', body: JSON.stringify(intent) })
+        .then((r) => { if (!r.ok) r.text().then((t) => logWire('✗', { status: r.status, error: t })); });
+    };
+    const ui = new XulJ(document.getElementById('root'), send);
+
+    // Wire inspector: shows every op as it arrives.
+    const wire = document.getElementById('wire');
+    const wireLog = document.getElementById('wire-log');
+    const pause = document.getElementById('wire-pause');
+    let opCount = 0;
+    function logWire(dir, msg) {
+      if (pause.checked || wire.hidden) return;
+      const li = document.createElement('li');
+      li.className = dir === '→' ? 'out' : dir === '✗' ? 'err' : 'in';
+      let text = JSON.stringify(msg);
+      if (msg.op === 'rows' && msg.append && msg.append.length > 3) {
+        text = JSON.stringify({ ...msg, append: `[${msg.append.length} rows]` });
+      }
+      li.textContent = `${dir} ${text}`;
+      wireLog.append(li);
+      while (wireLog.childElementCount > 300) wireLog.firstElementChild.remove();
+      wireLog.scrollTop = wireLog.scrollHeight;
+    }
+    document.getElementById('wire-toggle').addEventListener('click', (e) => {
+      wire.hidden = !wire.hidden;
+      e.target.textContent = wire.hidden ? 'Show wire' : 'Hide wire';
+    });
+
+    // Stream. EventSource resends Last-Event-ID on reconnect, so the server resumes from our seq.
+    const conn = document.getElementById('conn');
+    const seqEl = document.getElementById('seq');
+    let es;
+    function connect(from) {
+      es = new EventSource(`/stream?session=${session}${from ? `&from=${from}` : ''}`);
+      es.onopen = () => { conn.textContent = 'live'; conn.className = 'conn-on'; };
+      es.onerror = () => { conn.textContent = 'reconnecting'; conn.className = 'conn-off'; };
+      es.onmessage = (ev) => {
+        const op = JSON.parse(ev.data);
+        ui.apply(op);
+        opCount++;
+        seqEl.textContent = `seq ${ui.lastSeq}`;
+        document.getElementById('wire-count').textContent = `${opCount} ops`;
+        logWire('←', op);
+      };
+    }
+    connect(0);
+    document.getElementById('drop').addEventListener('click', () => {
+      es.close();
+      conn.textContent = 'dropped'; conn.className = 'conn-off';
+      setTimeout(() => connect(ui.lastSeq), 1500);
+    });
+  </script>
+</body>
+</html>

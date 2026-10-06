@@ -1,0 +1,25 @@
+{
+  "name": "xulj",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Prototype: streaming JSON-ized XUL as a server-driven UI protocol, over SSE or MQTT",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/e2e.js",
+    "tty": "node clients/text.js",
+    "test:mqtt": "node test/mqtt-e2e.js",
+    "mqtt:app": "node mqtt-app.js",
+    "mqtt:device": "node devices/greenhouse.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "mqtt": "^5.16.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xul-j/xul-j.git"
+  }
+}

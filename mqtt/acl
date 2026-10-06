@@ -1,0 +1,11 @@
+# Anonymous viewers: read every UI, publish only intents.
+topic read xulj/#
+topic write xulj/+/do/#
+topic write xulj/+/input/#
+
+# Each publisher owns exactly one app namespace.
+user deploy
+topic readwrite xulj/deploy/#
+
+user greenhouse
+topic readwrite xulj/greenhouse/#

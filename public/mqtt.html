@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XUL-J over MQTT</title>
+  <link rel="stylesheet" href="xul.css">
+  <style>
+    #apps { flex: 1; display: flex; gap: 12px; min-width: 0; min-height: 0; flex-wrap: wrap; }
+    #apps > .x-root { flex: 1 1 380px; min-height: 360px; }
+    .x-root:empty::before { content: attr(data-app) " — waiting for retained topics…"; color: var(--muted); padding: 12px; }
+    #broker { font-family: ui-monospace, Menlo, monospace; }
+    @media (max-width: 700px) { #apps { flex-direction: column; flex-wrap: nowrap; } }
+  </style>
+</head>
+<body>
+  <main id="app">
+    <div id="apps"></div>
+    <aside id="wire" hidden>
+      <header>
+        <strong>Wire</strong>
+        <span id="wire-count">0 msgs</span>
+        <label><input type="checkbox" id="wire-pause"> pause</label>
+      </header>
+      <ol id="wire-log"></ol>
+    </aside>
+  </main>
+  <footer id="dev">
+    <span id="conn" class="conn-off">connecting</span>
+    <span id="broker"></span>
+    <button type="button" id="wire-toggle">Show wire</button>
+    <button type="button" id="drop">Drop connection</button>
+  </footer>
+  <script src="vendor/mqtt.min.js"></script>
+  <script src="protocol/validate.js"></script>
+  <script src="protocol/mqtt-topics.js"></script>
+  <script src="xulj.js"></script>
+  <script>
+    'use strict';
+    const params = new URLSearchParams(location.search);
+    const brokerUrl = params.get('broker') || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.hostname}:9101`;
+    const apps = (params.get('apps') || 'deploy,greenhouse').split(',').filter((a) => /^[a-z0-9_-]+$/i.test(a));
+    document.getElementById('broker').textContent = brokerUrl;
+
+    // Wire inspector
+    const wire = document.getElementById('wire');
+    const wireLog = document.getElementById('wire-log');
+    const pause = document.getElementById('wire-pause');
+    let msgCount = 0;
+    function logWire(cls, text) {
+      if (pause.checked || wire.hidden) return;
+      const li = document.createElement('li');
+      li.className = cls;
+      li.textContent = text.length > 300 ? `${text.slice(0, 300)}…` : text;
+      wireLog.append(li);
+      while (wireLog.childElementCount > 300) wireLog.firstElementChild.remove();
+      wireLog.scrollTop = wireLog.scrollHeight;
+    }
+    document.getElementById('wire-toggle').addEventListener('click', (e) => {
+      wire.hidden = !wire.hidden;
+      e.target.textContent = wire.hidden ? 'Show wire' : 'Hide wire';
+    });
+
+    (async () => {
+      const schema = await (await fetch('protocol/schema.json')).json();
+      const validate = makeXulJValidator(schema);
+      const client = mqtt.connect(brokerUrl, {
+        clientId: `xulj-view-${Math.random().toString(16).slice(2, 10)}`,
+        // 'native' for environments without Web Workers (the default uses a worker timer).
+        timerVariant: params.get('timer') === 'native' ? 'native' : 'auto',
+      });
+      const routes = [];
+
+      for (const app of apps) {
+        const el = document.createElement('div');
+        el.className = 'x x-root';
+        el.dataset.app = app;
+        document.getElementById('apps').append(el);
+        let topics;
+        const ui = new XulJ(el, (intent) => {
+          const out = topics.intent(intent);
+          if (!out) return;
+          logWire('out', `→ ${out[0]} ${out[1]}`);
+          client.publish(out[0], out[1], { qos: 1 });
+        });
+        topics = new XulJTopicClient({
+          app,
+          target: { apply: (op) => ui.apply(op), lookup: (id) => ui.nodes.get(id) },
+          validate,
+          onReject: (topic, errs) => logWire('err', `✗ ${topic}: ${errs.join('; ')}`),
+        });
+        routes.push(topics);
+      }
+
+      const conn = document.getElementById('conn');
+      client.on('connect', () => {
+        conn.textContent = 'live';
+        conn.className = 'conn-on';
+        client.subscribe(routes.map((t) => t.subscription), { qos: 1 });
+      });
+      client.on('reconnect', () => { conn.textContent = 'reconnecting'; conn.className = 'conn-off'; });
+      client.on('offline', () => { conn.textContent = 'offline'; conn.className = 'conn-off'; });
+      client.on('message', (topic, payload, packet) => {
+        msgCount++;
+        document.getElementById('wire-count').textContent = `${msgCount} msgs`;
+        logWire(packet.retain ? 'in retained' : 'in', `← ${packet.retain ? '[R] ' : ''}${topic} ${payload.toString() || '∅'}`);
+        for (const t of routes) t.message(topic, payload);
+      });
+      document.getElementById('drop').addEventListener('click', () => {
+        client.end(true, () => setTimeout(() => client.reconnect(), 1500));
+        conn.textContent = 'dropped';
+        conn.className = 'conn-off';
+      });
+    })();
+  </script>
+</body>
+</html>

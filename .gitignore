@@ -1,0 +1,4 @@
+node_modules/
+mqtt/.env
+mqtt/passwd
+mqtt/data/

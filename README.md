@@ -82,6 +82,10 @@ to its own namespace.
 | `download` | *transient*: download a file the host produced (`url` must be `/download/<token>` on the same origin) |
 | `notify` | *transient*: show a short message (`level`: info, warning, error) |
 
+Menus (`menubar`, `menu`, `menuitem`, `menuseparator`) open and close in the client; only choosing
+an item sends an intent. A `menu` can carry an `accesskey` (`alt+f`), and a `menuitem` can be
+`checked`, which works well with `observes` for radio-style groups.
+
 Transient ops are sent to live clients only and never replayed, so a reconnect does not repeat a
 download. A `window` with `modal: true` (and an optional `icon`: info, warning, error, question)
 renders as a dialog over the others, which become inert. A `filepicker` element uploads the

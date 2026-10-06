@@ -46,6 +46,24 @@ function start(ui) {
     ui.emit({ op: 'command', id: 'cmd_deploy', disabled: busy });
     ui.emit({ op: 'command', id: 'cmd_cancel', disabled: !busy });
     ui.emit({ op: 'command', id: 'cmd_bulk', disabled: busy });
+    for (const e of ENVS) ui.emit({ op: 'command', id: `cmd_env_${e}`, disabled: busy });
+  }
+
+  // The menulist and the Environment submenu both end up here.
+  function setEnv(env) {
+    const i = ENVS.indexOf(env);
+    if (i < 0) return;
+    st.env = env;
+    for (const e of ENVS) ui.emit({ op: 'broadcast', id: `is_${e}`, value: e === env });
+    // Echo the selection so every other client viewing this session follows.
+    ui.emit({ op: 'set', id: 'env', attrs: { selectedIndex: i } });
+    ui.emit({ op: 'set', id: 'win', attrs: { label: `Deploy console — ${st.env}` } });
+  }
+
+  function setVerbose(on) {
+    st.verbose = on;
+    ui.emit({ op: 'broadcast', id: 'verbose', value: on });
+    refilter();
   }
 
   const status = (value) => ui.emit({ op: 'broadcast', id: 'status', value });
@@ -104,7 +122,38 @@ function start(ui) {
     ui.emit({ op: 'broadcast', id: 'status', value: 'Idle' });
     ui.emit({ op: 'broadcast', id: 'progress', value: 0 });
 
+    ui.emit({ op: 'command', id: 'cmd_verbose', label: 'Show debug lines' });
+    for (const e of ENVS) ui.emit({ op: 'command', id: `cmd_env_${e}`, label: e[0].toUpperCase() + e.slice(1) });
+    ui.emit({ op: 'broadcast', id: 'verbose', value: true });
+    for (const e of ENVS) ui.emit({ op: 'broadcast', id: `is_${e}`, value: e === st.env });
+
     ui.emit({ op: 'node', in: 'root', tag: 'window', id: 'win', label: 'Deploy console' });
+    ui.emit({
+      op: 'node', in: 'win', tag: 'menubar', id: 'mb',
+      children: [
+        {
+          tag: 'menu', id: 'm_deploy', label: 'Deploy', accesskey: 'alt+d',
+          children: [
+            { tag: 'menuitem', id: 'mi_deploy', command: 'cmd_deploy' },
+            { tag: 'menuitem', id: 'mi_cancel', command: 'cmd_cancel' },
+            { tag: 'menuseparator', id: 'ms_deploy' },
+            {
+              tag: 'menu', id: 'm_env', label: 'Environment',
+              children: ENVS.map((e) => ({ tag: 'menuitem', id: `mi_env_${e}`, command: `cmd_env_${e}`, observes: { checked: `is_${e}` } })),
+            },
+          ],
+        },
+        {
+          tag: 'menu', id: 'm_log', label: 'Log', accesskey: 'alt+l',
+          children: [
+            { tag: 'menuitem', id: 'mi_verbose', command: 'cmd_verbose', observes: { checked: 'verbose' } },
+            { tag: 'menuseparator', id: 'ms_log' },
+            { tag: 'menuitem', id: 'mi_clear', command: 'cmd_clear' },
+            { tag: 'menuitem', id: 'mi_bulk', command: 'cmd_bulk' },
+          ],
+        },
+      ],
+    });
     await sleep(120);
     ui.emit({
       op: 'node', in: 'win', tag: 'toolbar', id: 'tb',
@@ -133,7 +182,7 @@ function start(ui) {
             {
               tag: 'groupbox', label: 'Log output',
               children: [
-                { tag: 'checkbox', id: 'verbose', label: 'Show debug lines', value: true },
+                { tag: 'checkbox', id: 'verbose', label: 'Show debug lines', observes: { value: 'verbose' } },
                 { tag: 'description', value: 'Filtering happens on the server; the tree only receives matching rows.', class: 'muted' },
               ],
             },
@@ -181,20 +230,15 @@ function start(ui) {
           case 'cmd_bulk': bulk(); break;
           case 'cmd_clear': st.all = []; refilter(); status('Log cleared'); break;
           case 'cmd_rollback': log('warn', `Rollback of ${st.env} requested (demo: no-op)`); break;
+          case 'cmd_verbose': setVerbose(!st.verbose); break;
+          default:
+            if (m.command.startsWith('cmd_env_')) setEnv(m.command.slice(8));
         }
       } else if (m.op === 'input') {
         if (m.id === 'filter') { st.filter = String(m.value); refilter(); }
-        if (m.id === 'verbose') { st.verbose = Boolean(m.value); refilter(); }
-        if (m.id === 'env') {
-          const i = ENVS.indexOf(m.value);
-          if (i < 0) return;
-          st.env = ENVS[i];
-          // Echo the selection so every other client viewing this session follows.
-          ui.emit({ op: 'set', id: 'env', attrs: { selectedIndex: i } });
-          ui.emit({ op: 'set', id: 'win', attrs: { label: `Deploy console — ${st.env}` } });
-        }
+        if (m.id === 'verbose') setVerbose(Boolean(m.value));
+        if (m.id === 'env') setEnv(String(m.value));
         if (m.id === 'filter') ui.emit({ op: 'set', id: 'filter', attrs: { value: st.filter } });
-        if (m.id === 'verbose') ui.emit({ op: 'set', id: 'verbose', attrs: { value: st.verbose } });
       }
     },
   };

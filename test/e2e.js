@@ -55,6 +55,22 @@ async function step(name, fn) {
     assert.strictEqual(kids.indexOf('tb_rollback') + 1, kids.indexOf('tb_spacer'));
   });
 
+  await step('menubar: nested menus, separators, access keys, checked items bound to broadcasters', async () => {
+    const mb = model.ids.get('mb');
+    assert.strictEqual(model.ids.get('win').children[0], mb, 'menubar comes first');
+    assert.deepStrictEqual(mb.children.map((c) => `${c.tag}:${c.attrs.label}:${c.attrs.accesskey}`), ['menu:Deploy:alt+d', 'menu:Log:alt+l']);
+    assert.deepStrictEqual(model.ids.get('m_deploy').children.map((c) => c.tag), ['menuitem', 'menuitem', 'menuseparator', 'menu']);
+    assert.strictEqual(model.resolved(model.ids.get('mi_deploy')).label, 'Deploy', 'label comes from the command');
+    assert.strictEqual(model.resolved(model.ids.get('mi_env_staging')).checked, true);
+    assert.strictEqual(model.resolved(model.ids.get('mi_verbose')).checked, true);
+    await intent(base, session, { op: 'do', command: 'cmd_verbose' });
+    await until(() => model.resolved(model.ids.get('mi_verbose')).checked === false, 'check item toggled');
+    assert.strictEqual(model.resolved(model.ids.get('verbose')).value, false, 'the checkbox follows the same broadcaster');
+    await intent(base, session, { op: 'do', command: 'cmd_verbose' });
+    await until(() => model.resolved(model.ids.get('mi_verbose')).checked === true, 'toggled back');
+    assert(renderText(model).includes('≡ Deploy ▾  Log ▾'));
+  });
+
   await step('disabled command is refused by the server', async () => {
     const r = await intent(base, session, { op: 'do', command: 'cmd_cancel' });
     assert.strictEqual(r.status, 409);
@@ -88,12 +104,14 @@ async function step(name, fn) {
   await step('dropped connection resumes from last seq without duplicates', async () => {
     conn.close();
     const lastSeq = model.lastSeq;
-    await intent(base, session, { op: 'input', id: 'env', value: 'production' }); // happens while offline
+    await intent(base, session, { op: 'do', command: 'cmd_env_production' }); // via the menu, while offline
     const resumed = [];
     conn = stream(base, session, { from: lastSeq, onOp: (op) => { resumed.push(op); model.apply(op); } });
     await until(() => model.ids.get('win').attrs.label.endsWith('production'), 'missed op replayed');
     assert(resumed.every((op) => op.seq > lastSeq), 'only newer ops replayed');
     assert.strictEqual(model.resolved(model.ids.get('env')).selectedIndex, 1, 'selection echoed to other clients');
+    assert.strictEqual(model.resolved(model.ids.get('mi_env_production')).checked, true);
+    assert.strictEqual(model.resolved(model.ids.get('mi_env_staging')).checked, false);
   });
 
   await step('a fresh client with no state rebuilds the identical UI', async () => {

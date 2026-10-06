@@ -168,6 +168,10 @@ function renderText(model, { maxRows = 5 } = {}) {
         for (const r of rows.slice(-maxRows)) out.push(`${pad}  ${a.cols.map((c) => r[c.id]).join(' | ')}`);
         break;
       }
+      case 'menubar':
+        out.push(`${pad}≡ ${n.children.filter((c) => !model.resolved(c).hidden).map((c) => (c.tag === 'menu' ? `${model.resolved(c).label} ▾` : model.resolved(c).label || '')).join('  ')}`);
+        return;
+      case 'menu': out.push(`${pad}[ ${a.label} ▾ ]`); return; // a dropdown in a toolbar
       case 'spacer': return;
       default: if (n.tag !== 'vbox' && n.tag !== 'hbox' && n.tag !== 'box') out.push(`${pad}<${n.tag}>`);
     }

@@ -15,12 +15,15 @@ class Model {
     this.sources = new Map();
     this.waiting = []; // overlays whose anchor has not arrived yet
     this.lastSeq = 0;
+    this.transient = this.transient || []; // download/notify ops (not UI state; survive reset)
   }
 
   apply(op) {
     if (op.seq) this.lastSeq = op.seq;
     switch (op.op) {
       case 'reset': return this.reset();
+      case 'download':
+      case 'notify': return this.transient.push(op);
       case 'node':
         if (this.insert(op)) return;
         // A newer version of a still-waiting node supersedes the queued one.
@@ -138,7 +141,8 @@ function renderText(model, { maxRows = 5 } = {}) {
     const dis = a.disabled ? ' (disabled)' : '';
     switch (n.tag) {
       case 'root': break;
-      case 'window': out.push(`${pad}== ${a.label || 'window'} ==`); break;
+      case 'window': out.push(`${pad}== ${a.modal ? '[modal] ' : ''}${a.label || 'window'} ==`); break;
+      case 'filepicker': out.push(`${pad}[choose file${a.accept ? ` ${a.accept}` : ''}…] ${a.value || ''}`); break;
       case 'toolbarbutton':
       case 'button': out.push(`${pad}[ ${a.label || '?'} ]${dis}`); break;
       case 'textbox': out.push(`${pad}[${a.password && a.value ? '•'.repeat(String(a.value).length) : a.value || a.placeholder || ''}_____]`); break;

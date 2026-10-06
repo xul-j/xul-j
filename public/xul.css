@@ -113,6 +113,32 @@ progress.x-progressmeter { width: 140px; accent-color: var(--accent); }
 @keyframes shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .x-pending { animation: none; } }
 
+/* ---- modal windows ------------------------------------------------------ */
+.x-root.x-has-modal::before {
+  content: ""; position: fixed; inset: 0; z-index: 9; background: rgba(20, 20, 18, .35);
+}
+.x-window.x-modal {
+  position: fixed; z-index: 10; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  flex: none; width: max-content; min-width: min(320px, calc(100vw - 32px));
+  max-width: min(560px, calc(100vw - 32px)); max-height: 80vh; overflow: auto;
+  padding: 16px; gap: 10px; box-shadow: 0 12px 40px rgba(0, 0, 0, .3);
+}
+.x-window.x-modal > .x-description:first-child { margin: 0; white-space: pre-wrap; padding-left: 30px; position: relative; }
+.x-window.x-modal[data-icon] > .x-description:first-child::before {
+  position: absolute; left: 0; top: -1px; font-size: 18px; line-height: 1;
+}
+.x-window[data-icon="info"] > .x-description:first-child::before { content: "ℹ️"; }
+.x-window[data-icon="warning"] > .x-description:first-child::before { content: "⚠️"; }
+.x-window[data-icon="error"] > .x-description:first-child::before { content: "⛔"; }
+.x-window[data-icon="question"] > .x-description:first-child::before { content: "❓"; }
+.x-filepicker { display: flex; flex-direction: column; gap: 6px; }
+
+/* ---- toasts ------------------------------------------------------------- */
+#x-toasts { position: fixed; right: 16px; bottom: 48px; z-index: 20; display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 32px); }
+.x-toast { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: 8px 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, .15); }
+.x-toast-warning { border-left-color: var(--warn); }
+.x-toast-error { border-left-color: var(--err); }
+
 /* ---- dev chrome --------------------------------------------------------- */
 #wire {
   width: 420px; max-width: 45%; display: flex; flex-direction: column;

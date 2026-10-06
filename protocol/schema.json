@@ -26,6 +26,12 @@
     },
     {
       "$ref": "#/$defs/reset"
+    },
+    {
+      "$ref": "#/$defs/download"
+    },
+    {
+      "$ref": "#/$defs/notify"
     }
   ],
   "$defs": {
@@ -59,7 +65,8 @@
         "deck",
         "tree",
         "progressmeter",
-        "pending"
+        "pending",
+        "filepicker"
       ]
     },
     "element": {
@@ -193,6 +200,27 @@
         "password": {
           "type": "boolean",
           "description": "textbox masks its value"
+        },
+        "modal": {
+          "type": "boolean",
+          "description": "window: blocks the other windows until it closes"
+        },
+        "icon": {
+          "enum": [
+            "info",
+            "warning",
+            "error",
+            "question"
+          ],
+          "description": "window: kind of message, for dialogs"
+        },
+        "accept": {
+          "type": "string",
+          "description": "filepicker: accepted types, as in <input accept>"
+        },
+        "multiple": {
+          "type": "boolean",
+          "description": "filepicker: allow several files"
         }
       }
     },
@@ -381,6 +409,56 @@
         },
         "seq": {
           "$ref": "#/$defs/seq"
+        }
+      }
+    },
+    "download": {
+      "description": "Transient (never replayed): the client should download a file the host produced.",
+      "type": "object",
+      "required": [
+        "op",
+        "url",
+        "name"
+      ],
+      "properties": {
+        "op": {
+          "const": "download"
+        },
+        "seq": {
+          "$ref": "#/$defs/seq"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^/download/[A-Za-z0-9_-]+$"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "notify": {
+      "description": "Transient (never replayed): a short message for the user.",
+      "type": "object",
+      "required": [
+        "op",
+        "message"
+      ],
+      "properties": {
+        "op": {
+          "const": "notify"
+        },
+        "seq": {
+          "$ref": "#/$defs/seq"
+        },
+        "message": {
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
         }
       }
     }

@@ -75,6 +75,14 @@ to its own namespace.
 | `broadcast` | set a broadcaster value; any attribute in `observes: {attr: broadcaster}` follows it |
 | `rows` | `append` to (or `clear`) a data source; every `tree` bound to it updates |
 | `reset` | drop all client state (always seq 1) |
+| `download` | *transient*: download a file the host produced (`url` must be `/download/<token>` on the same origin) |
+| `notify` | *transient*: show a short message (`level`: info, warning, error) |
+
+Transient ops are sent to live clients only and never replayed, so a reconnect does not repeat a
+download. A `window` with `modal: true` (and an optional `icon`: info, warning, error, question)
+renders as a dialog over the others, which become inert. A `filepicker` element uploads the
+chosen files with `POST /upload?session=<id>&id=<picker>` (header `X-Filename`); hosts that
+support it, such as the desktop bridges, hand the stored files to the application.
 
 ## Known gaps
 

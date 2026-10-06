@@ -6,9 +6,12 @@ const ROW_H = 22;
 const STRUCT = new Set(['op', 'seq', 'in', 'before', 'children', 'tag', 'id']);
 
 class XulJ {
-  constructor(rootEl, send) {
+  // options.upload(id, file) -> Promise: sends a picked file to the host (filepicker).
+  // options.download(op): starts a download; the default follows op.url on this origin.
+  constructor(rootEl, send, options = {}) {
     this.rootEl = rootEl;
     this.send = send;
+    this.options = options;
     this.reset();
     document.addEventListener('keydown', (e) => this.onKey(e));
   }
@@ -27,6 +30,8 @@ class XulJ {
     if (op.seq) this.lastSeq = op.seq;
     switch (op.op) {
       case 'reset': return this.reset();
+      case 'download': return (this.options.download || XulJ.download)(op);
+      case 'notify': return this.notify(op);
       case 'node':
         if (this.insert(op)) return;
         // A newer version of a still-waiting node supersedes the queued one.
@@ -50,6 +55,7 @@ class XulJ {
         kept.forEach((e) => (fresh.body || fresh.el).appendChild(e));
         if (fresh.tag === 'tabbox') this.syncTabs(fresh);
         if (fresh.tag === 'deck') this.refresh(fresh);
+        if (fresh.tag === 'window') this.syncModal();
         this.afterInsert(fresh);
         return this.flush();
       }
@@ -67,6 +73,7 @@ class XulJ {
         n.el.remove();
         this.unregister(n.el);
         if (n.tag === 'tabpanel' && parent) this.syncTabs(this.nodes.get(parent.dataset.xid));
+        if (n.tag === 'window') this.syncModal();
         return;
       }
       case 'command': {
@@ -108,6 +115,7 @@ class XulJ {
     this.afterInsert(n);
     if (n.tag === 'tabpanel') this.syncTabs(parent);
     if (parent.tag === 'deck') this.refresh(parent);
+    if (n.tag === 'window') this.syncModal(); // needs the window attached to see it
     this.flush();
     return true;
   }
@@ -245,6 +253,30 @@ class XulJ {
         d.setAttribute('aria-busy', 'true');
         return d;
       }
+      case 'filepicker': {
+        const d = el('div');
+        n.input = el('input');
+        n.input.type = 'file';
+        n.status = el('span', 'x-muted');
+        d.append(n.input, n.status);
+        n.input.addEventListener('change', async () => {
+          const files = [...n.input.files];
+          if (!files.length || !this.options.upload) return;
+          n.input.disabled = true;
+          try {
+            for (const [i, f] of files.entries()) {
+              n.status.textContent = `Uploading ${f.name}${files.length > 1 ? ` (${i + 1}/${files.length})` : ''}…`;
+              await this.options.upload(n.id, f);
+            }
+            n.status.textContent = '';
+          } catch (e) {
+            n.status.textContent = `Upload failed: ${e.message}`;
+          } finally {
+            n.input.disabled = Boolean(this.resolved(n).disabled);
+          }
+        });
+        return d;
+      }
       default: return el('div'); // window, boxes, toolbar, statusbar, spacer, deck
     }
   }
@@ -287,7 +319,18 @@ class XulJ {
 
     switch (n.tag) {
       case 'window':
-        if (a.label) document.title = a.label;
+        if (a.label && !a.modal) document.title = a.label;
+        el.classList.toggle('x-modal', Boolean(a.modal));
+        if (a.icon) el.dataset.icon = a.icon;
+        else delete el.dataset.icon;
+        if (a.modal) { el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', a.label || ''); }
+        this.syncModal();
+        break;
+      case 'filepicker':
+        if (a.accept) n.input.accept = a.accept;
+        n.input.multiple = Boolean(a.multiple);
+        n.input.disabled = Boolean(a.disabled) || !this.options.upload;
+        if (a.value) n.status.textContent = Array.isArray(a.value) ? a.value.join(', ') : String(a.value);
         break;
       case 'label':
       case 'description':
@@ -351,6 +394,48 @@ class XulJ {
   sizeCell(cell, col) {
     if (col.width) cell.style.flex = `0 0 ${col.width}px`;
     else cell.style.flex = `${col.flex || 1} 1 0`;
+  }
+
+  // ---- modal windows and notifications --------------------------------------
+
+  // While a modal window is open, every other window is inert (no focus, no clicks).
+  syncModal() {
+    const wins = [...this.rootEl.children].filter((e) => e.classList.contains('x-window'));
+    const modal = wins.filter((w) => w.classList.contains('x-modal') && !w.hidden).pop();
+    this.rootEl.classList.toggle('x-has-modal', Boolean(modal));
+    for (const w of wins) {
+      if (modal && w !== modal) w.setAttribute('inert', '');
+      else w.removeAttribute('inert');
+    }
+    if (modal && !modal.contains(document.activeElement)) {
+      const target = modal.querySelector('.x-primary:not(:disabled)') || modal.querySelector('button:not(:disabled), input:not(:disabled)');
+      if (target) setTimeout(() => target.focus(), 0);
+    }
+  }
+
+  notify(op) {
+    let box = document.getElementById('x-toasts');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'x-toasts';
+      box.setAttribute('role', 'status');
+      document.body.append(box);
+    }
+    const t = document.createElement('div');
+    t.className = `x-toast x-toast-${op.level || 'info'}`;
+    t.textContent = op.message;
+    box.append(t);
+    setTimeout(() => t.remove(), 5000);
+  }
+
+  static download(op) {
+    if (!/^\/download\/[A-Za-z0-9_-]+$/.test(op.url)) return;
+    const a = document.createElement('a');
+    a.href = op.url;
+    a.download = op.name || '';
+    document.body.append(a);
+    a.click();
+    a.remove();
   }
 
   // ---- tabbox ------------------------------------------------------------

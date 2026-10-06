@@ -11,7 +11,8 @@
     "mqtt:app": "node mqtt-app.js",
     "mqtt:device": "node devices/greenhouse.js",
     "test:mcp": "node test/mcp-e2e.js",
-    "mcp": "node mcp/server.js"
+    "mcp": "node mcp/server.js",
+    "test:browser": "node test/browser-e2e.js"
   },
   "engines": {
     "node": ">=16"
@@ -26,5 +27,8 @@
   },
   "bin": {
     "xulj-mcp": "mcp/server.js"
+  },
+  "devDependencies": {
+    "jsdom": "^22.1.0"
   }
 }

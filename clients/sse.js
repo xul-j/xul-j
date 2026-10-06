@@ -2,11 +2,12 @@
 'use strict';
 const http = require('http');
 
-function stream(base, session, { from = 0, onOp, onOpen } = {}) {
+function stream(base, session, { from = 0, onOp, onOpen, onEnd } = {}) {
   const url = new URL(`/stream?session=${session}`, base);
   const req = http.get(url, { headers: from ? { 'Last-Event-ID': String(from) } : {} }, (res) => {
     if (onOpen) onOpen(res);
     res.setEncoding('utf8');
+    if (onEnd) res.on('end', () => onEnd(null));
     let buf = '';
     res.on('data', (chunk) => {
       buf += chunk;
@@ -19,7 +20,9 @@ function stream(base, session, { from = 0, onOp, onOpen } = {}) {
       }
     });
   });
-  return { close: () => req.destroy() };
+  if (onEnd) req.on('error', (e) => onEnd(e));
+  let closed = false;
+  return { close: () => { closed = true; req.destroy(); }, get closed() { return closed; } };
 }
 
 function intent(base, session, msg) {

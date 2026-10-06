@@ -44,6 +44,7 @@ repo; they embed `public/` and reuse `protocol/` and `clients/` for their tests.
 - `public/xulj.js`: DOM renderer (flex boxes, virtualized tree, commands, broadcasters)
 - `app/deploy-console.js`: the demo app
 - `server.js`: SSE stream with resume (`Last-Event-ID`), intent endpoint with a command allowlist
+- `mcp/server.js`: MCP server for AI agents (see below)
 - `protocol/mqtt-topics.js`: MQTT topics → ops, for the browser and Node
 - `transport/mqtt-publisher.js`: gives an app `ui.emit(op)` and publishes retained topics
 - `mqtt-app.js`: runs `app/deploy-console.js` (unchanged) over MQTT
@@ -86,11 +87,52 @@ Menus (`menubar`, `menu`, `menuitem`, `menuseparator`) open and close in the cli
 an item sends an intent. A `menu` can carry an `accesskey` (`alt+f`), and a `menuitem` can be
 `checked`, which works well with `observes` for radio-style groups.
 
+**Theming.** `{"op":"theme","tokens":{…},"dark":{…}}` carries design tokens, never CSS: colours
+(`accent`, `accentText`, `surface`, `background`, `chrome`, `text`, `muted`, `border`, `danger`,
+`warning`, `success`), `radius` (0–16), `density` (compact, normal, comfortable) and `font` (system,
+serif, mono, rounded, classic). The client applies them as CSS variables scoped to the app root, and
+the viewer wins: high-contrast mode ignores producer colours, dark mode uses only an explicit `dark`
+palette, and colour pairs below WCAG contrast are dropped. Labels can carry a role class (`danger`,
+`warning`, `success`, `muted`) instead of a colour.
+
+**Selection and context menus.** A `tree` with `seltype` (none, single, multiple) is selectable:
+click, Ctrl/Shift-click and the arrow keys send `{"op":"select","id","rows"}`, shown at once and
+confirmed by the producer's `selection` attribute; Enter or double-click sends `{"op":"activate","id","row"}`.
+An element with `contextmenu: "<id>"` opens that `menupopup` on right-click (selecting the row first),
+Shift+F10 or the Menu key, and the client sends `{"op":"contextmenu","id","target"}` so the producer
+can run its "menu opening" logic while the menu is already showing.
+
 Transient ops are sent to live clients only and never replayed, so a reconnect does not repeat a
 download. A `window` with `modal: true` (and an optional `icon`: info, warning, error, question)
 renders as a dialog over the others, which become inert. A `filepicker` element uploads the
 chosen files with `POST /upload?session=<id>&id=<picker>` (header `X-Filename`); hosts that
 support it, such as the desktop bridges, hand the stored files to the application.
+
+## MCP: let AI agents operate any XUL-J interface
+
+`mcp/server.js` is an MCP server (stdio, no dependencies). It connects to a XUL-J endpoint (this
+server, or a [net-bridge](https://github.com/xul-j/net-bridge) /
+[java-bridge](https://github.com/xul-j/java-bridge) hosting a legacy desktop app) as its own session,
+and gives agents the semantic tree instead of screenshots:
+
+    claude mcp add xulj -- node /path/to/xul-j/mcp/server.js --url http://127.0.0.1:8092
+
+| tool | does |
+|---|---|
+| `connect` | connect to a XUL-J URL (unless `--url` / `XULJ_URL` was given) |
+| `get_ui` | the interface as an outline: ids, labels, values, commands, tables, dialogs |
+| `list_commands` | every command with label, shortcut and enabled state |
+| `do_command` | run a command, as clicking its button or menu item would |
+| `set_value` | type into a text box, tick a checkbox, pick a menulist option (by label) |
+| `read_table` / `select_rows` / `activate_row` | read rows as JSON, select, double-click |
+| `open_context_menu` | open a right-click menu (the app enables items), list its commands |
+| `upload_file` / `download_file` | answer file dialogs: give the app a file, fetch what it saved |
+| `wait_for` | wait for text or an element after something slow |
+
+Every action returns what changed (`+` added, `-` removed, `~` changed, `!` notifications,
+`↓` downloads), with enable/disable flips summarised, so an agent rarely needs to re-read the screen.
+`npm run test:mcp` runs it against the demo console; the bridges have agent-style tests driving
+their legacy demo apps through it.
 
 ## Known gaps
 

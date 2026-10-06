@@ -9,7 +9,9 @@
     "tty": "node clients/text.js",
     "test:mqtt": "node test/mqtt-e2e.js",
     "mqtt:app": "node mqtt-app.js",
-    "mqtt:device": "node devices/greenhouse.js"
+    "mqtt:device": "node devices/greenhouse.js",
+    "test:mcp": "node test/mcp-e2e.js",
+    "mcp": "node mcp/server.js"
   },
   "engines": {
     "node": ">=16"
@@ -21,5 +23,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/xul-j/xul-j.git"
+  },
+  "bin": {
+    "xulj-mcp": "mcp/server.js"
   }
 }

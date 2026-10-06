@@ -27,6 +27,10 @@ back intents (`do <command>`, `input <id> <value>`). Two transports carry the sa
     open http://<host>:8091/mqtt.html  (?apps=deploy,greenhouse&broker=ws://host:9101)
     npm run test:mqtt    # end-to-end against the broker (restarts xulj/deploy)
 
+Project site and live demos: <https://xul-j.github.io/>, including an LLM generator where a model
+of your choice (through OpenRouter, with your own key) streams an interface as XUL-J and then acts
+as its backend.
+
 Bridges serve existing desktop applications through the same SSE protocol and browser client:
 [xul-j/net-bridge](https://github.com/xul-j/net-bridge) for .NET WinForms and
 [xul-j/java-bridge](https://github.com/xul-j/java-bridge) for Java Swing. Clone them next to this

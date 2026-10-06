@@ -41,6 +41,8 @@ function publishUi() {
   publishVent();
   retain('bc/auto', { value: state.auto });
   retain('bc/status', { value: 'Online' });
+  // Its own look: themes are scoped per app, so it doesn't restyle the other apps on the page.
+  retain('theme', { tokens: { accent: '#2e7d32', accentText: '#ffffff', radius: 10, density: 'comfortable', font: 'rounded' } });
   publishReadings();
 }
 

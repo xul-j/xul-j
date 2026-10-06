@@ -85,6 +85,32 @@ async function publisher() {
     b.client.end();
   });
 
+  await step('theme, selection, context menu and activation travel over MQTT too', async () => {
+    await a.send({ op: 'do', command: 'cmd_theme_terminal' });
+    await until(() => a.model.theme && a.model.theme.tokens.font === 'mono', 'retained theme topic');
+    const late = await viewer();
+    await until(() => late.model.theme && late.model.theme.tokens.font === 'mono', 'late joiner gets the theme');
+    late.client.end();
+    await a.send({ op: 'do', command: 'cmd_theme_default' });
+    await until(() => a.model.theme && !a.model.theme.tokens.font, 'back to default');
+
+    await a.send({ op: 'select', id: 'log', rows: [0] });
+    await until(() => JSON.stringify(a.model.ids.get('log').attrs.selection) === '[0]', 'selection echoed');
+    await until(() => a.model.commands.get('cmd_details').disabled === false, 'context item enabled');
+    await a.send({ op: 'contextmenu', id: 'log_menu', target: 'log' });
+    const before = a.model.transient.length;
+    await a.send({ op: 'do', command: 'cmd_details' });
+    await until(() => a.model.transient.length > before && a.model.transient[a.model.transient.length - 1].op === 'notify', 'notify topic');
+    const n = a.model.transient.length;
+    await a.send({ op: 'activate', id: 'log', row: 0 });
+    await until(() => a.model.transient.length > n, 'activation answered');
+    // Intents that don't fit the UI are ignored by the publisher, not passed to the app.
+    await a.client.publishAsync('xulj/deploy/select/tb_deploy', JSON.stringify({ rows: [0] }), { qos: 1 });
+    await a.client.publishAsync('xulj/deploy/contextmenu/log_menu', JSON.stringify({ target: 'env' }), { qos: 1 });
+    await sleep(300);
+    assert.strictEqual(JSON.stringify(a.model.ids.get('log').attrs.selection), '[0]');
+  });
+
   await step('broker ACL drops UI forged by an anonymous viewer', async () => {
     await a.client.publishAsync('xulj/deploy/node/tb_deploy', JSON.stringify({ in: 'tb', tag: 'label', value: 'pwned' }), { qos: 1 });
     await a.client.publishAsync('xulj/deploy/cmd/cmd_deploy', JSON.stringify({ label: 'pwned' }), { qos: 1, retain: true });
@@ -126,6 +152,7 @@ async function publisher() {
     const g = await viewer('greenhouse');
     await until(() => g.model.ids.has('gh_vent') && g.model.broadcasters.get('status') === 'Online', 'greenhouse UI');
     assert.strictEqual(g.model.resolved(g.model.ids.get('gh_vent')).disabled, true, 'vent disabled in auto mode');
+    await until(() => g.model.theme && g.model.theme.tokens.accent === '#2e7d32', 'the device publishes its own theme');
     await g.send({ op: 'input', id: 'gh_auto', value: false });
     await until(() => g.model.resolved(g.model.ids.get('gh_vent')).disabled === false, 'manual mode');
     const label = g.model.resolved(g.model.ids.get('gh_vent')).label;

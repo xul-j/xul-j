@@ -20,6 +20,8 @@ There is no authentication anywhere; put producers behind your own access contro
     npm start          # http://127.0.0.1:8080, the demo deploy console over SSE (PORT / HOST to override)
     npm run tty        # the same stream, rendered in a terminal
     npm test           # end-to-end checks against a real server
+    npm run test:browser   # the renderer in jsdom: menus, selection, context menus, theming
+    npm run test:mcp       # the MCP server driving the demo
 
 ```jsonl
 {"op":"command","id":"cmd_deploy","label":"Deploy","key":"ctrl+enter"}
@@ -136,7 +138,14 @@ its own interface.
 | `rows/<src>/epoch` | yes | `{epoch}`; a newer epoch clears the source |
 | `rows/<src>/ring/<k>` | yes | `{epoch, n, row}`: the last N rows, for late joiners |
 | `rows/<src>/live` | no | `{epoch, n0, rows}` |
-| `do/<cmd>`, `input/<id>` | no | viewer intents, the only topics anonymous clients may publish |
+| `theme` | yes | `{tokens, dark?}`; themes are scoped per app, so apps on one page keep their own look |
+| `notify` | no | `{message, level}` |
+| `do/<cmd>`, `input/<id>` | no | intents: `{}`, `{value}` |
+| `select/<tree>`, `activate/<tree>`, `contextmenu/<popup>` | no | intents: `{rows}`, `{row}`, `{target}` |
+
+Intent topics are the only ones anonymous viewers may publish (see `mqtt/acl`), and the publisher
+checks each intent against its current UI (a known enabled command, a tree, a popup that the target
+actually uses) before the app sees it.
 
 Retained messages arrive in any order: nodes wait for their parent, and `order` fixes sibling
 position. Viewers validate every payload against the schema, because no server sits in between, and
@@ -178,14 +187,14 @@ re-read the screen.
 | `transport/mqtt-publisher.js`, `mqtt-app.js`, `devices/greenhouse.js`, `mqtt/` | the MQTT transport, the demo app over MQTT, a self-describing device, broker config |
 | `clients/` | a Node SSE client and the terminal renderer |
 | `mcp/server.js` | the MCP server |
-| `test/` | `e2e.js` (SSE), `mqtt-e2e.js` (MQTT, needs the broker), `mcp-e2e.js` (MCP) |
+| `test/` | `e2e.js` (SSE), `browser-e2e.js` (the renderer in jsdom), `mqtt-e2e.js` (MQTT, needs the broker), `mcp-e2e.js` (MCP) |
 
 ## Known gaps
 
-- **MQTT** carries elements, commands, broadcasters, rows and the `do`/`input` intents only:
-  `theme`, `notify`, selection, activation and context-menu intents are not mapped to topics yet.
-  A viewer that disconnects misses live rows (it gets the retained ring), all viewers share one UI
-  per app, and anonymous viewers can flood intent topics.
+- **MQTT** carries everything except `download` (there is no HTTP host to serve the file from) and
+  file uploads, so file dialogs need SSE. A viewer that disconnects misses live rows and notifications
+  (it gets the retained ring), all viewers share one UI per app, and anonymous viewers can flood
+  intent topics.
 - **SSE**: the op log is never compacted, so a reconnect replays everything; there is no session
   epoch, so a client resuming against a restarted server can resume wrongly.
 - **MCP** speaks to SSE endpoints only, and inherits their lack of authentication.

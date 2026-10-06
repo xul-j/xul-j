@@ -33,25 +33,43 @@ class MqttUi {
     found.forEach((t) => this.published.add(t));
   }
 
-  // Route viewers' intents to the app, applying the same allowlist as the SSE server.
+  // Route viewers' intents to the app, checked against the current UI like the SSE server does.
   async listen(app, onIntent = () => {}) {
     this.client.on('message', (topic, payload, packet) => {
       if (packet.retain || !topic.startsWith(this.base)) return;
       const [kind, id, extra] = topic.slice(this.base.length).split('/');
       if (extra !== undefined || !id) return;
-      let msg;
-      if (kind === 'do') {
-        const cmd = this.commands.get(id);
-        if (!cmd || cmd.disabled) return onIntent({ op: 'do', command: id, refused: true });
-        msg = { op: 'do', command: id };
-      } else if (kind === 'input') {
-        try { msg = { op: 'input', id, value: JSON.parse(payload.toString()).value }; } catch { return; }
-        if (!this.nodes.has(id)) return;
-      } else return;
+      let body = {};
+      try { body = payload.length ? JSON.parse(payload.toString()) : {}; } catch { return; }
+      const msg = this.intentFor(kind, id, body);
+      if (!msg) return;
       onIntent(msg);
+      if (msg.refused) return;
       try { app.intent(msg); } catch (e) { console.error('intent failed', e); }
     });
-    await this.client.subscribeAsync([`${this.base}do/+`, `${this.base}input/+`], { qos: 1 });
+    await this.client.subscribeAsync(['do', 'input', 'select', 'activate', 'contextmenu'].map((k) => `${this.base}${k}/+`), { qos: 1 });
+  }
+
+  intentFor(kind, id, body) {
+    const n = this.nodes.get(id);
+    const isRow = (r) => Number.isInteger(r) && r >= 0;
+    switch (kind) {
+      case 'do': {
+        const cmd = this.commands.get(id);
+        return !cmd || cmd.disabled ? { op: 'do', command: id, refused: true } : { op: 'do', command: id };
+      }
+      case 'input': return n && 'value' in body ? { op: 'input', id, value: body.value } : null;
+      case 'select':
+        return n && n.tag === 'tree' && Array.isArray(body.rows) && body.rows.every(isRow) ? { op: 'select', id, rows: body.rows } : null;
+      case 'activate':
+        return n && n.tag === 'tree' && isRow(body.row) ? { op: 'activate', id, row: body.row } : null;
+      case 'contextmenu': {
+        // id is the popup; the target must be an element that names it as its context menu.
+        const target = typeof body.target === 'string' && this.nodes.get(body.target);
+        return n && n.tag === 'menupopup' && target && target.attrs.contextmenu === id ? { op: 'contextmenu', id, target: body.target } : null;
+      }
+      default: return null;
+    }
   }
 
   pub(topic, body, retain = true) {
@@ -94,6 +112,13 @@ class MqttUi {
       }
       case 'broadcast': return this.pub(`bc/${op.id}`, { value: op.value });
       case 'rows': return this.rows(op);
+      case 'theme': return this.pub('theme', op.dark ? { tokens: op.tokens, dark: op.dark } : { tokens: op.tokens });
+      case 'notify': return this.pub('notify', { message: op.message, level: op.level || 'info' }, false);
+      case 'download':
+        // MQTT has no HTTP host to serve the file from; downloads need the SSE transport.
+        if (!this.warnedDownload) console.warn('xulj mqtt: download ops are not supported over MQTT and were dropped');
+        this.warnedDownload = true;
+        return undefined;
     }
   }
 

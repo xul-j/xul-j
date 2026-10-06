@@ -7,8 +7,13 @@
 //   <prefix><app>/rows/<src>/epoch       retained  {epoch}; a newer epoch clears the source
 //   <prefix><app>/rows/<src>/ring/<k>    retained  {epoch, n, row}: the last N rows, for late joiners
 //   <prefix><app>/rows/<src>/live        live      {epoch, n0, rows}
+//   <prefix><app>/theme                  retained  {tokens, dark?}; empty = default theme
+//   <prefix><app>/notify                 live      {message, level}
 //   <prefix><app>/do/<cmd>               client →  {}
 //   <prefix><app>/input/<id>             client →  {value}
+//   <prefix><app>/select/<tree>          client →  {rows}
+//   <prefix><app>/activate/<tree>        client →  {row}
+//   <prefix><app>/contextmenu/<popup>    client →  {target}
 (function (root) {
   'use strict';
 
@@ -31,6 +36,9 @@
     intent(msg) {
       if (msg.op === 'do') return [this.doTopic(msg.command), '{}'];
       if (msg.op === 'input') return [this.inputTopic(msg.id), JSON.stringify({ value: msg.value })];
+      if (msg.op === 'select') return [`${this.base}select/${msg.id}`, JSON.stringify({ rows: msg.rows })];
+      if (msg.op === 'activate') return [`${this.base}activate/${msg.id}`, JSON.stringify({ row: msg.row })];
+      if (msg.op === 'contextmenu') return [`${this.base}contextmenu/${msg.id}`, JSON.stringify({ target: msg.target })];
       return null;
     }
 
@@ -48,7 +56,9 @@
         case 'cmd': return this.emit(topic, body ? { op: 'command', id, ...body } : { op: 'command', id, deleted: true });
         case 'bc': return this.emit(topic, { op: 'broadcast', id, value: body ? body.value : null });
         case 'rows': return body && this.rows(topic, id, parts[2], body);
-        default: return; // do/ and input/ are other viewers' intents
+        case 'theme': return this.emit(topic, body ? { op: 'theme', ...body } : { op: 'theme', tokens: {} });
+        case 'notify': return body && this.emit(topic, { op: 'notify', ...body });
+        default: return; // do/, input/, select/, activate/, contextmenu/: other viewers' intents
       }
     }
 

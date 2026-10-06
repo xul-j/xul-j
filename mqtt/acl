@@ -2,6 +2,9 @@
 topic read xulj/#
 topic write xulj/+/do/#
 topic write xulj/+/input/#
+topic write xulj/+/select/#
+topic write xulj/+/activate/#
+topic write xulj/+/contextmenu/#
 
 # Each publisher owns exactly one app namespace.
 user deploy

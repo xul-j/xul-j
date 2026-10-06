@@ -87,6 +87,7 @@ button.x-primary { background: var(--accent); color: var(--accent-text); border-
 button.x-danger { color: var(--danger); border-color: var(--danger); }
 button:disabled, select:disabled, input:disabled { opacity: .45; cursor: default; }
 input.x-textbox { width: 180px; max-width: 100%; }
+textarea.x-textbox { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px; min-height: 60px; resize: vertical; }
 button:focus-visible, select:focus-visible, input:focus-visible, .x-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 progress.x-progressmeter { width: 140px; accent-color: var(--accent); }
 

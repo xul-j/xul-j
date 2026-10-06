@@ -183,8 +183,8 @@ class XulJ {
         return b;
       }
       case 'textbox': {
-        const i = el('input');
-        i.type = 'text';
+        const i = el(n.attrs.multiline ? 'textarea' : 'input');
+        if (!n.attrs.multiline) i.type = 'text';
         let timer;
         i.addEventListener('input', () => {
           clearTimeout(timer);
@@ -342,7 +342,7 @@ class XulJ {
         el.disabled = Boolean(a.disabled);
         break;
       case 'textbox':
-        el.type = a.password ? 'password' : 'text';
+        if (el.tagName === 'INPUT') el.type = a.password ? 'password' : 'text';
         el.placeholder = a.placeholder || '';
         el.disabled = Boolean(a.disabled);
         // Ownership rule: the user owns the value while the field has focus.

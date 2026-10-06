@@ -221,6 +221,10 @@
         "multiple": {
           "type": "boolean",
           "description": "filepicker: allow several files"
+        },
+        "multiline": {
+          "type": "boolean",
+          "description": "textbox: several lines (fixed when the element is created)"
         }
       }
     },
